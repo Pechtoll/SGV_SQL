@@ -1,0 +1,64 @@
+-- Funcao CPF
+create or replace FUNCTION fc_valida_cpf (p_cpf IN CHAR)
+     RETURN BOOLEAN
+IS
+     m_total NUMBER := 0;
+     m_digito NUMBER := 0;
+     c_cpf VARCHAR2(255);
+BEGIN
+	 c_cpf := REPLACE(REPLACE(p_cpf, '.', ''), '-', '');
+     FOR i IN 1 .. 9
+     LOOP
+     m_total := m_total + SUBSTR (c_cpf, i, 1) * (11 - i);
+     END LOOP;
+
+    m_digito := 11 - MOD (m_total, 11);
+
+    IF m_digito > 9
+     THEN
+     m_digito := 0;
+     END IF;
+
+    IF m_digito != SUBSTR (c_cpf, 10, 1)
+     THEN
+     RETURN FALSE;
+     END IF;
+
+    m_digito := 0;
+     m_total := 0;
+
+    FOR i IN 1 .. 10
+     LOOP
+     m_total := m_total + SUBSTR (c_cpf, i, 1) * (12 - i);
+
+    END LOOP;
+
+    m_digito := 11 - MOD (m_total, 11);
+
+    IF m_digito > 9
+     THEN
+     m_digito := 0;
+     END IF;
+
+    IF m_digito != SUBSTR (c_cpf, 11, 1)
+     THEN
+     RETURN FALSE;
+     END IF;
+
+    RETURN TRUE;
+END fc_valida_cpf;
+/
+
+-- Trigger
+CREATE OR REPLACE TRIGGER CHECA_CPF BEFORE
+    INSERT OR UPDATE ON T_MC_CLI_FISICA
+    FOR EACH ROW
+DECLARE
+    v_condition BOOLEAN := FALSE;
+BEGIN
+    v_condition := fc_valida_cpf(:NEW.NR_CPF);
+    IF (v_condition = FALSE) THEN
+        RAISE_APPLICATION_ERROR(-20000,'CPF inválido!');
+    END IF;
+END;
+/

@@ -1,0 +1,122 @@
+
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE PROCEDURE "PRC_REPLACE_CLASSIFICACAO_SAC"
+(p_tp_sac IN OUT T_MC_SGV_SAC.TP_SAC%TYPE, p_ds_sac OUT VARCHAR2)
+AS
+
+BEGIN 
+		
+	IF p_tp_sac = 'S' THEN p_ds_sac := 'SUGESTÃO';
+	
+    ELSIF p_tp_sac = 'D' THEN p_ds_sac := 'DÚVIDA';
+	
+    ELSIF p_tp_sac = 'E' THEN p_ds_sac := 'ELOGIO';
+	
+    ELSE p_tp_sac := 'CLASSIFICAÇÃO INVÁLIDA';
+	
+    END IF;
+
+END;
+/
+alter procedure PRC_REPLACE_CLASSIFICACAO_SAC compile;
+
+CREATE OR REPLACE PROCEDURE "PRC_REPLACE_NOME_TIPO_CATEGORIA"
+(p_tp_categoria IN OUT CHAR, p_ds_categoria OUT VARCHAR2)
+
+AS
+
+
+BEGIN 
+		
+	IF p_tp_categoria = 'V' THEN p_ds_categoria := 'VÍDEO';
+	
+    ELSIF p_tp_categoria = 'P' THEN p_ds_categoria := 'PRODUTO';
+	
+    ELSE p_tp_categoria := 'CATEGORIA INVÁLIDA';
+	
+    END IF;
+
+END;
+/
+
+alter procedure PRC_REPLACE_NOME_TIPO_CATEGORIA compile;
+SET SERVEROUTPUT ON
+DECLARE 
+
+	ds_completa_sac VARCHAR2(50);
+	ds_indice_satisfacao VARCHAR2(50);
+	ds_nome_categoria VARCHAR2(50);
+
+	CURSOR c_sac_tabela IS
+		
+		SELECT 
+			SS.NR_SAC,
+			SS.DT_ABERTURA_SAC, 
+			SS.HR_ABERTURA_SAC,
+			SS.TP_SAC,
+			SS.NR_INDICE_SATISFACAO,
+			P.CD_PRODUTO,
+			P.DS_PRODUTO,
+			P.TP_EMBALAGEM,
+			P.VL_UNITARIO,
+			P.VL_PERC_LUCRO,
+			CP.CD_CATEGORIA,
+			CP.TP_CATEGORIA,
+			CP.DS_CATEGORIA,
+			CL.NR_CLIENTE,
+			CL.NM_CLIENTE,
+			CL.QT_ESTRELAS,
+			E.SG_ESTADO,
+			E.NM_ESTADO,
+			C.NM_CIDADE,
+			B.NM_BAIRRO
+		FROM
+			T_MC_SGV_SAC SS
+		INNER JOIN
+			T_MC_PRODUTO P ON (P.CD_PRODUTO = SS.CD_PRODUTO)
+		INNER JOIN
+			T_MC_CATEGORIA_PROD CP ON (CP.CD_CATEGORIA = P.CD_CATEGORIA)
+		INNER JOIN
+			T_MC_CLIENTE CL ON (CL.NR_CLIENTE = SS.NR_CLIENTE)
+		INNER JOIN
+			T_MC_END_CLI EC ON (EC.NR_CLIENTE = CL.NR_CLIENTE)
+		INNER JOIN 
+			T_MC_LOGRADOURO L ON (L.CD_LOGRADOURO = EC.CD_LOGRADOURO_CLI)
+    	INNER JOIN 
+    		T_MC_BAIRRO B ON (B.CD_BAIRRO = L.CD_LOGRADOURO)
+    	INNER JOIN 
+    		T_MC_CIDADE C ON (C.CD_CIDADE = B.CD_CIDADE)
+    	INNER JOIN 
+    		T_MC_ESTADO E ON (E.SG_ESTADO = C.SG_ESTADO)
+    	WHERE 
+   			EC.ST_END = 'A';
+   	
+        
+BEGIN
+    DBMS_OUTPUT.put_line('sac');
+	FOR emprec IN c_sac_tabela LOOP
+		
+		PRC_REPLACE_CLASSIFICACAO_SAC(emprec.TP_SAC, ds_completa_sac);
+		PF0110.prc_mc_gera_indice_satisfacao_atd(emprec.NR_INDICE_SATISFACAO, ds_indice_satisfacao);
+		PRC_REPLACE_NOME_TIPO_CATEGORIA(emprec.TP_CATEGORIA, ds_nome_categoria);
+		
+ 		INSERT INTO 
+			T_MC_SGV_OCORRENCIA_SAC
+			(NR_OCORRENCIA_SAC, DT_ABERTURA_SAC, HR_ABERTURA_SAC, DS_TIPO_CLASSIFICACAO_SAC, DS_INDICE_SATISFACAO_ATD_SAC, CD_CATEGORIA_PROD, NM_TIPO_CATEGORIA_PROD, DS_CATEGORIA_PROD, CD_PRODUTO, DS_PRODUTO, TP_EMBALAGEM, VL_UNITARIO_PRODUTO, VL_PERC_LUCRO, VL_UNITARIO_LUCRO_PRODUTO, SG_ESTADO, NM_ESTADO, NM_CIDADE, NM_BAIRRO, NR_CLIENTE, NM_CLIENTE, QT_ESTRELAS_CLIENTE, VL_ICMS_PRODUTO)
+		VALUES
+			(emprec.NR_SAC, emprec.DT_ABERTURA_SAC, emprec.HR_ABERTURA_SAC, ds_completa_sac, ds_indice_satisfacao, emprec.CD_CATEGORIA, ds_nome_categoria, emprec.DS_CATEGORIA, emprec.CD_PRODUTO, emprec.DS_PRODUTO, emprec.TP_EMBALAGEM, emprec.VL_UNITARIO, emprec.VL_PERC_LUCRO, ((emprec.VL_PERC_LUCRO / 100) * emprec.VL_UNITARIO), emprec.SG_ESTADO, emprec.NM_ESTADO, emprec.NM_CIDADE, emprec.NM_BAIRRO, emprec.NR_CLIENTE, emprec.NM_CLIENTE, emprec.QT_ESTRELAS, ((pf0110.fun_mc_gera_aliquota_media_icms_estado(emprec.SG_ESTADO) / 100) * emprec.VL_UNITARIO));
+		
+		ds_completa_sac := '';
+		
+        ds_indice_satisfacao := '';
+		
+        ds_nome_categoria := '';
+	
+        
+	END LOOP;
+	COMMIT;
+END;
+/
+
+SELECT * from T_MC_SGV_OCORRENCIA_SAC 
